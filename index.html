@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kayro Studio · Parche HQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --mist: #e6eaf0;
+    --paper: #f7f8fa;
+    --ink: #0f172a;
+    --ink-soft: #4b5568;
+    --strip: #111827;
+    --signal: #14b8a6;
+    --error: #c2410c;
+    --line: #cbd2dd;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--mist); color: var(--ink);
+    font: 400 1rem/1.5 var(--body);
+    padding: clamp(1.25rem, 5vw, 4rem) clamp(1rem, 5vw, 2rem);
+  }
+  main { max-width: 38rem; margin: 0 auto; }
+  h1 {
+    font: 700 clamp(2.4rem, 9vw, 3.6rem)/1 var(--display);
+    letter-spacing: -0.03em; margin: 0 0 .9rem;
+  }
+  .lead { color: var(--ink-soft); margin: 0 0 2rem; max-width: 30rem; }
+
+  .drop {
+    display: block; background: var(--paper); border: 2px dashed var(--line); border-radius: 10px;
+    padding: 2.2rem 1.25rem; text-align: left; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--signal); background: #fff; }
+  .drop:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .drop strong { font: 700 1.25rem/1.2 var(--display); display: block; margin-bottom: .25rem; }
+  .drop span { color: var(--ink-soft); font-size: .95rem; }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .job { margin-top: 2rem; }
+  .file { font-weight: 500; overflow-wrap: anywhere; margin: 0 0 1.25rem; }
+  .meter { margin-bottom: 1.1rem; }
+  .meter-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .4rem; font-weight: 500; }
+  .pct { font: 700 1.1rem var(--display); font-variant-numeric: tabular-nums; }
+
+  /* La barra imita una línea de tiempo de editor de video: tira oscura, marcas de fotograma y cabezal. */
+  .track {
+    position: relative; height: 46px; border-radius: 6px; overflow: hidden; background: var(--strip);
+  }
+  .track::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg, transparent 0 11px, rgba(255,255,255,.14) 11px 12px);
+  }
+  .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--signal); transition: width .3s linear; }
+  .fill::before {
+    content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 3px; background: #fff; z-index: 1;
+  }
+  .meter.idle .fill::before { display: none; }
+
+  .status { min-height: 1.5em; margin: 1.25rem 0 0; }
+  .status.err { color: var(--error); font-weight: 500; }
+  .actions { margin-top: 1.25rem; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .note { color: var(--ink-soft); font-size: .9rem; margin: 0; }
+
+  button {
+    font: 700 1rem var(--display); padding: .8rem 1.4rem; border-radius: 6px; border: 0; cursor: pointer;
+    background: var(--ink); color: #fff;
+  }
+  button.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+  button:focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+  button[disabled] { opacity: .5; cursor: default; }
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { .fill, .drop { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Parche HQ</h1>
+  <p class="lead">Sube tu video y te lo devolvemos parchado, con la calidad original. Acepta videos de hasta 1080p y 120 fps.</p>
+
+  <label class="drop" id="drop">
+    <strong>Elige un video o suéltalo aquí</strong>
+    <span id="limits">MP4, MOV, MKV o WebM.</span>
+    <input type="file" id="file" accept="video/*,.mkv,.mov,.mp4,.webm">
+  </label>
+
+  <section class="job" id="job" hidden aria-live="polite">
+    <p class="file" id="name"></p>
+
+    <div class="meter" id="upMeter">
+      <div class="meter-head"><span>Subida</span><span class="pct" id="upPct">0%</span></div>
+      <div class="track" role="progressbar" aria-label="Subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="upBar">
+        <div class="fill" id="upFill"></div>
+      </div>
+    </div>
+
+    <div class="meter idle" id="prMeter">
+      <div class="meter-head"><span>Procesamiento</span><span class="pct" id="prPct">0%</span></div>
+      <div class="track" role="progressbar" aria-label="Procesamiento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prBar">
+        <div class="fill" id="prFill"></div>
+      </div>
+    </div>
+
+    <p class="status" id="status"></p>
+
+    <div class="actions">
+      <button id="download" hidden>Descargar video parchado</button>
+      <button id="again" class="ghost" hidden>Parchar otro video</button>
+    </div>
+    <p class="note" id="note" hidden>El enlace funciona una sola vez: al terminar la descarga, el video se borra del servidor.</p>
+  </section>
+</main>
+
+<script>
+  // Si esta página vive en otro dominio que la API, define antes: window.KAYRO_API_BASE = "https://tu-api.onrender.com"
+  const API = (window.KAYRO_API_BASE || "").replace(/\/$/, "");
+  const $ = id => document.getElementById(id);
+
+  let maxUploadMB = null;
+  let pollTimer = null, source = null, finished = false;
+
+  fetch(API + "/api/limits").then(r => r.json()).then(l => {
+    maxUploadMB = l.maxUploadMB;
+    $("limits").textContent = `MP4, MOV, MKV o WebM. Hasta ${l.maxUploadMB} MB.`;
+  }).catch(() => {});
+
+  function setBar(prefix, pct) {
+    const v = Math.max(0, Math.min(100, pct));
+    $(prefix + "Fill").style.width = v + "%";
+    $(prefix + "Pct").textContent = Math.round(v) + "%";
+    $(prefix + "Bar").setAttribute("aria-valuenow", Math.round(v));
+    $(prefix === "up" ? "upMeter" : "prMeter").classList.toggle("idle", v <= 0);
+  }
+
+  function status(text, isError) {
+    const el = $("status");
+    el.textContent = text;
+    el.classList.toggle("err", !!isError);
+  }
+
+  function reset() {
+    if (source) source.close();
+    clearInterval(pollTimer);
+    source = null; finished = false;
+    $("job").hidden = true;
+    $("drop").hidden = false;
+    $("file").value = "";
+    $("download").hidden = $("again").hidden = $("note").hidden = true;
+    $("download").disabled = false;
+    $("download").textContent = "Descargar video parchado";
+    setBar("up", 0); setBar("pr", 0); status("");
+  }
+
+  function fail(message) {
+    finished = true;
+    if (source) source.close();
+    clearInterval(pollTimer);
+    status(message, true);
+    $("again").hidden = false;
+  }
+
+  function done(result, id) {
+    finished = true;
+    if (source) source.close();
+    clearInterval(pollTimer);
+    setBar("pr", 100);
+    status(result.addedAvc
+      ? "Listo. Se agregó H.264/AVC sin pérdida y se aplicó el parche."
+      : "Listo. Tu video ya tenía H.264/AVC y se aplicó el parche.");
+    const btn = $("download");
+    btn.hidden = $("note").hidden = false;
+    btn.onclick = () => {
+      btn.disabled = true;
+      btn.textContent = "Descargando…";
+      const a = document.createElement("a");
+      a.href = API + result.downloadUrl;
+      a.download = result.filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      status("Descarga iniciada. El video se borrará del servidor al terminar.");
+      $("again").hidden = false;
+    };
+  }
+
+  function onState(s, id) {
+    if (finished) return;
+    if (s.status === "error") return fail(s.error ? s.error.message : "No se pudo procesar el video.");
+    if (s.status === "done") return done(s.result, id);
+    setBar("pr", s.percent);
+    status(s.message);
+  }
+
+  function watch(id) {
+    source = new EventSource(`${API}/api/jobs/${id}/events`);
+    source.addEventListener("progress", e => onState(JSON.parse(e.data), id));
+    source.addEventListener("done", e => onState(JSON.parse(e.data), id));
+    source.addEventListener("error", e => {
+      if (e.data) return onState(JSON.parse(e.data), id);   // error enviado por el servidor
+      // Falló la conexión SSE: seguir por consulta periódica
+      if (finished || pollTimer) return;
+      source.close();
+      pollTimer = setInterval(() => {
+        fetch(`${API}/api/jobs/${id}`).then(r => r.ok ? r.json() : Promise.reject())
+          .then(s => onState(s, id))
+          .catch(() => fail("Se perdió la conexión con el servidor."));
+      }, 1500);
+    });
+  }
+
+  function start(file) {
+    if (!file) return;
+    if (maxUploadMB && file.size > maxUploadMB * 1024 * 1024) {
+      $("job").hidden = false; $("drop").hidden = true; $("name").textContent = file.name;
+      return fail(`El archivo supera el máximo de ${maxUploadMB} MB.`);
+    }
+
+    $("drop").hidden = true;
+    $("job").hidden = false;
+    $("name").textContent = file.name;
+    setBar("up", 0); setBar("pr", 0);
+    status("Subiendo el video…");
+
+    const form = new FormData();
+    form.append("video", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", API + "/api/jobs");
+    xhr.upload.onprogress = e => { if (e.lengthComputable) setBar("up", (e.loaded / e.total) * 100); };
+    xhr.onerror = () => fail("No se pudo subir el video. Revisa tu conexión.");
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status !== 202) return fail(body.error ? body.error.message : "No se pudo subir el video.");
+      setBar("up", 100);
+      status("Video recibido. Revisando…");
+      watch(body.jobId);
+    };
+    xhr.send(form);
+  }
+
+  $("file").addEventListener("change", e => start(e.target.files[0]));
+  $("again").addEventListener("click", reset);
+
+  const drop = $("drop");
+  ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => start(e.dataTransfer.files[0]));
+</script>
+</body>
+</html>

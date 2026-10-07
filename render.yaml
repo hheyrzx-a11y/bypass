@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: kayro-patch-api
+    runtime: docker
+    # "free" sirve para probar (512 MB de RAM, CPU mínima: la conversión sin pérdida será muy lenta).
+    # Para uso real: starter o superior.
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS      # tu sitio, ej: https://tusitio.com (varios separados por coma)
+        sync: false
+      - key: MAX_UPLOAD_MB
+        value: "100"
+      - key: MAX_WORK_MB
+        value: "150"
